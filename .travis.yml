@@ -5,7 +5,6 @@ install:
   - (cd rust-nightly-x86_64-unknown-linux-gnu/ && sudo ./install.sh)
 script:
   - rustc main.rs
-  - rustdoc --test lib.rs -L.
   - ./main &
-  - curl --socks5 localhost:8089 www.google.com -o /dev/null
+  - curl --socks5 localhost:8089 http://static.rust-lang.org/dist/rust-nightly-x86_64-unknown-linux-gnu.tar.gz -o /dev/null
 

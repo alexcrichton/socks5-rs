@@ -227,7 +227,6 @@ pub mod v4 {
 
         let ip = match ip {
             Ipv4Addr(0, 0, 0, n) if n != 0 => {
-                println!("lol");
                 let mut name = try!(b.read_until(0));
                 name.pop();
                 let name = match str::from_utf8(name.as_slice()) {
@@ -239,7 +238,7 @@ pub mod v4 {
                     [] => return Err(::other_err("no ips for domain name")),
                 }
             }
-            ip => { println!("hehe"); ip },
+            ip => ip,
         };
 
         match cmd {

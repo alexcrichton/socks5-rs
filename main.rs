@@ -194,7 +194,7 @@ pub mod v5 {
 
 pub mod v4 {
     use std::io::net::addrinfo::get_host_addresses;
-    use std::io::net::ip::{SocketAddr, Ipv4Addr};
+    use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
     use std::io::net::tcp::TcpStream;
     use std::io;
     use std::str;
@@ -258,7 +258,12 @@ pub mod v4 {
 
         // Send the response of the result of the connection
         let code = if remote.is_ok() {0x5a} else {0x5b};
-        try!(s.write([0, code, 0, 0, 0, 0, 0, 0]));
+        try!(s.write([0, code]));
+        try!(s.write_be_u16(addr.port));
+        match addr.ip {
+            Ipv4Addr(a, b, c, d) => try!(s.write([a, b, c, d])),
+            Ipv6Addr(..) => fail!("no ipv6 in socks4"),
+        }
         remote
     }
 }

@@ -3,27 +3,11 @@
 //! Implementation of a socks5 proxy
 //!
 //! http://www.ietf.org/rfc/rfc1928.txt
+//! http://en.wikipedia.org/wiki/SOCKS
 
-use std::io::net::addrinfo::get_host_addresses;
-use std::io::net::ip::{Ipv4Addr, Ipv6Addr, IpAddr};
 use std::io::net::tcp::{TcpListener, TcpStream};
 use std::io::{Listener, Acceptor, IoResult};
 use std::io;
-use std::str;
-
-static VERSION: u8 = 5;
-
-static METH_NO_AUTH: u8 = 0;
-static METH_GSSAPI: u8 = 1;
-static METH_USER_PASS: u8 = 2;
-
-static CMD_CONNECT: u8 = 1;
-static CMD_BIND: u8 = 2;
-static CMD_UDP_ASSOCIATE: u8 = 3;
-
-static ATYP_IPV4: u8 = 1;
-static ATYP_IPV6: u8 = 4;
-static ATYP_DOMAIN: u8 = 3;
 
 fn main() {
     println!("listening on 0.0.0.0:8089");
@@ -38,101 +22,28 @@ fn main() {
 }
 
 fn handle(mut s: TcpStream) -> IoResult<()> {
-    let vers = try!(s.read_byte());
-    assert_eq!(vers, VERSION);
-    let mut methods = Vec::new();
-    for _ in range(0, try!(s.read_byte())) {
-        methods.push(try!(s.read_byte()));
-    }
-
-    // Only support requests with no authentication for now
-    if methods.contains(&METH_NO_AUTH) {
-        try!(s.write([VERSION, METH_NO_AUTH]));
-    } else {
-        return s.write([VERSION, 0xff]);
-    }
-
-    assert_eq!(try!(s.read_byte()), VERSION);
-    let cmd = try!(s.read_byte());
-    let _rsv = try!(s.read_byte());
-
-    // Decode the incoming IP/port
-    let ip = match try!(s.read_byte()) {
-        0x01 => Ipv4Addr(try!(s.read_byte()),
-                         try!(s.read_byte()),
-                         try!(s.read_byte()),
-                         try!(s.read_byte())),
-
-        0x04 => Ipv6Addr(try!(s.read_be_u16()),
-                         try!(s.read_be_u16()),
-                         try!(s.read_be_u16()),
-                         try!(s.read_be_u16()),
-                         try!(s.read_be_u16()),
-                         try!(s.read_be_u16()),
-                         try!(s.read_be_u16()),
-                         try!(s.read_be_u16())),
-        0x03 => {
-            let nbytes = try!(s.read_byte());
-            let name = try!(s.read_exact(nbytes as uint));
-            let name = match str::from_utf8(name.as_slice()) {
-                Some(n) => n,
-                None => fail!("hostname not utf8"),
-            };
-            match try!(get_host_addresses(name)).as_slice().head() {
-                Some(&addr) => addr,
-                None => fail!("no ips for hostname: {}", name),
+    match try!(s.read_byte()) {
+        v5::VERSION => match try!(v5::request(&mut s)) {
+            v5::Connect(addr) => {
+                let remote = try!(v5::connect(&mut s, addr));
+                proxy(s, remote)
             }
-        }
-        n => fail!("invalid ATYP field: {}", n),
-    };
-    let port = try!(s.read_be_u16());
+        },
 
-    match cmd {
-        CMD_CONNECT => connect(s, ip, port),
-        // Only the bind command is supported for now
-        n => fail!("unsupported command: {}", n),
+        v4::VERSION => match try!(v4::request(&mut s)) {
+            v4::Connect(addr, _) => {
+                let remote = try!(v4::connect(&mut s, addr));
+                proxy(s, remote)
+            }
+        },
+
+        _ => Err(other_err("unsupported version")),
     }
 }
 
-fn connect(mut s: TcpStream, ip: IpAddr, port: u16) -> IoResult<()> {
-    let mut remote = TcpStream::connect(ip.to_str().as_slice(), port);
-
-    // Send the response of the result of the connection
-    try!(s.write([5, if remote.is_ok() {0} else {5}, 0]));
-    fn write_addr(s: &mut TcpStream, ip: IpAddr, port: u16) -> IoResult<()> {
-        match ip {
-            Ipv4Addr(a, b, c, d) => {
-                try!(s.write([1, a, b, c, d]));
-            }
-            Ipv6Addr(a, b, c, d, e, f, g, h) => {
-                try!(s.write([4]));
-                try!(s.write_be_u16(a));
-                try!(s.write_be_u16(b));
-                try!(s.write_be_u16(c));
-                try!(s.write_be_u16(d));
-                try!(s.write_be_u16(e));
-                try!(s.write_be_u16(f));
-                try!(s.write_be_u16(g));
-                try!(s.write_be_u16(h));
-            }
-        }
-        s.write_be_u16(port)
-    }
-    match remote {
-        Ok(ref mut r) => {
-            let name = r.socket_name().unwrap();
-            try!(write_addr(&mut s, name.ip, name.port));
-        }
-        Err(..) => {
-            try!(write_addr(&mut s, ip, port));
-        }
-    }
-
-    // Now that we've finished our handshake, get two tasks going to shuttle
-    // data in both directions for this connection.
-    let r = try!(remote);
-    let s2 = s.clone();
-    let r2 = r.clone();
+fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
+    let client2 = client.clone();
+    let remote2 = remote.clone();
 
     fn cp(mut reader: TcpStream, mut writer: TcpStream) -> IoResult<()> {
         let err = io::util::copy(&mut reader, &mut writer);
@@ -143,6 +54,212 @@ fn connect(mut s: TcpStream, ip: IpAddr, port: u16) -> IoResult<()> {
     }
 
     let (tx, rx) = channel();
-    spawn(proc() { tx.send(cp(s2, r2)); });
-    cp(r, s).and(rx.recv())
+    spawn(proc() { tx.send(cp(client2, remote2)); });
+    cp(remote, client).and(rx.recv())
+}
+
+fn other_err(s: &'static str) -> io::IoError {
+    io::IoError { kind: io::OtherIoError, desc: s, detail: None }
+}
+
+pub mod v5 {
+    use std::io::net::addrinfo::get_host_addresses;
+    use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
+    use std::io::net::tcp::TcpStream;
+    use std::io;
+    use std::str;
+
+    pub static VERSION: u8 = 5;
+
+    pub static METH_NO_AUTH: u8 = 0;
+    pub static METH_GSSAPI: u8 = 1;
+    pub static METH_USER_PASS: u8 = 2;
+
+    pub static CMD_CONNECT: u8 = 1;
+    pub static CMD_BIND: u8 = 2;
+    pub static CMD_UDP_ASSOCIATE: u8 = 3;
+
+    pub static ATYP_IPV4: u8 = 1;
+    pub static ATYP_IPV6: u8 = 4;
+    pub static ATYP_DOMAIN: u8 = 3;
+
+    pub enum Request {
+        Connect(SocketAddr)
+    }
+
+    /// Process a request from the client provided.
+    ///
+    /// It is assumed that the version number has already been read.
+    pub fn request(s: &mut TcpStream) -> io::IoResult<Request> {
+        let mut methods = Vec::new();
+        for _ in range(0, try!(s.read_byte())) {
+            methods.push(try!(s.read_byte()));
+        }
+
+        // Only support requests with no authentication for now
+        if methods.contains(&METH_NO_AUTH) {
+            try!(s.write([VERSION, METH_NO_AUTH]));
+        } else {
+            try!(s.write([VERSION, 0xff]));
+            return Err(::other_err("no supported method given"))
+        }
+
+        assert_eq!(try!(s.read_byte()), VERSION);
+        let cmd = try!(s.read_byte());
+        let _rsv = try!(s.read_byte());
+
+        // Decode the incoming IP/port
+        let ip = match try!(s.read_byte()) {
+            0x01 => Ipv4Addr(try!(s.read_byte()),
+                             try!(s.read_byte()),
+                             try!(s.read_byte()),
+                             try!(s.read_byte())),
+
+            0x04 => Ipv6Addr(try!(s.read_be_u16()),
+                             try!(s.read_be_u16()),
+                             try!(s.read_be_u16()),
+                             try!(s.read_be_u16()),
+                             try!(s.read_be_u16()),
+                             try!(s.read_be_u16()),
+                             try!(s.read_be_u16()),
+                             try!(s.read_be_u16())),
+            0x03 => {
+                let nbytes = try!(s.read_byte());
+                let name = try!(s.read_exact(nbytes as uint));
+                let name = match str::from_utf8(name.as_slice()) {
+                    Some(n) => n,
+                    None => return Err(::other_err("invalid hostname provided"))
+                };
+                match try!(get_host_addresses(name)).as_slice().head() {
+                    Some(&addr) => addr,
+                    None => return Err(::other_err("no valid ips for hostname"))
+                }
+            }
+            _ => return Err(::other_err("invalid ATYP field")),
+        };
+        let port = try!(s.read_be_u16());
+
+        match cmd {
+            CMD_CONNECT => Ok(Connect(SocketAddr { ip: ip, port: port })),
+            // Only the connect command is supported for now
+            _ => Err(::other_err("unsupported command"))
+        }
+    }
+
+    /// Connect to the remote address for the client specified.
+    ///
+    /// If successful, returns the remote connection that was established.
+    pub fn connect(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<TcpStream> {
+        let mut remote = TcpStream::connect(addr.ip.to_str().as_slice(),
+                                            addr.port);
+
+        // Send the response of the result of the connection
+        let code = match remote {
+            Ok(..) => 0,
+            Err(ref e) if e.kind == io::ConnectionRefused => 5,
+            Err(ref e) if e.kind == io::ConnectionFailed => 4,
+            Err(..) => 1,
+        };
+        try!(s.write([5, code, 0]));
+
+        fn write_addr(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<()> {
+            match addr.ip {
+                Ipv4Addr(a, b, c, d) => {
+                    try!(s.write([1, a, b, c, d]));
+                }
+                Ipv6Addr(a, b, c, d, e, f, g, h) => {
+                    try!(s.write([4]));
+                    try!(s.write_be_u16(a));
+                    try!(s.write_be_u16(b));
+                    try!(s.write_be_u16(c));
+                    try!(s.write_be_u16(d));
+                    try!(s.write_be_u16(e));
+                    try!(s.write_be_u16(f));
+                    try!(s.write_be_u16(g));
+                    try!(s.write_be_u16(h));
+                }
+            }
+            s.write_be_u16(addr.port)
+        }
+        match remote {
+            Ok(ref mut r) => try!(write_addr(s, r.socket_name().unwrap())),
+            Err(..) => try!(write_addr(s, addr)),
+        }
+
+        // Now that we've finished our handshake, get two tasks going to shuttle
+        // data in both directions for this connection.
+        remote
+    }
+}
+
+pub mod v4 {
+    use std::io::net::addrinfo::get_host_addresses;
+    use std::io::net::ip::{SocketAddr, Ipv4Addr};
+    use std::io::net::tcp::TcpStream;
+    use std::io;
+    use std::str;
+
+    pub static VERSION: u8 = 4;
+
+    pub static CMD_CONNECT: u8 = 1;
+    pub static CMD_BIND: u8 = 2;
+
+    pub enum Request {
+        Connect(SocketAddr, Vec<u8>)
+    }
+
+    fn by_ref<'a, R: Reader>(r: &'a mut R) -> io::RefReader<'a, R> { r.by_ref() }
+
+    /// Process a request from the client provided.
+    ///
+    /// It is assumed that the version number has already been read.
+    pub fn request(s: &mut TcpStream) -> io::IoResult<Request> {
+        let mut b = io::BufferedReader::new(by_ref(s));
+        // assert_eq!(try!(s.read_byte()), VERSION);
+        let cmd = try!(b.read_byte());
+        let port = try!(b.read_be_u16());
+        let ip = Ipv4Addr(try!(b.read_byte()),
+                          try!(b.read_byte()),
+                          try!(b.read_byte()),
+                          try!(b.read_byte()));
+        let mut id = try!(b.read_until(0));
+        id.pop();
+
+        let ip = match ip {
+            Ipv4Addr(0, 0, 0, n) if n != 0 => {
+                println!("lol");
+                let mut name = try!(b.read_until(0));
+                name.pop();
+                let name = match str::from_utf8(name.as_slice()) {
+                    Some(s) => s,
+                    None => return Err(::other_err("invalid domain name")),
+                };
+                match try!(get_host_addresses(name)).as_slice() {
+                    [ip, ..] => ip,
+                    [] => return Err(::other_err("no ips for domain name")),
+                }
+            }
+            ip => { println!("hehe"); ip },
+        };
+
+        match cmd {
+            CMD_CONNECT => Ok(Connect(SocketAddr { ip: ip, port: port }, id)),
+            // Only the connect command is supported for now
+            _ => Err(::other_err("unsupported command"))
+        }
+    }
+
+    /// Connect to the remote address for the client specified.
+    ///
+    /// If successful, returns the remote connection that was established.
+    pub fn connect(s: &mut TcpStream,
+                   addr: SocketAddr) -> io::IoResult<TcpStream> {
+        let remote = TcpStream::connect(addr.ip.to_str().as_slice(),
+                                        addr.port);
+
+        // Send the response of the result of the connection
+        let code = if remote.is_ok() {0x5a} else {0x5b};
+        try!(s.write([0, code, 0, 0, 0, 0, 0, 0]));
+        remote
+    }
 }

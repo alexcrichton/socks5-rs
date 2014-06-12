@@ -8,7 +8,7 @@ script:
   - ./main &
   - echo test > testfile
   - python -m SimpleHTTPServer &
-  - sleep 2
+  - sleep 10
   - curl --socks5 localhost:8089 http://127.0.0.1:8000/testfile > socks5
   - curl --socks4 localhost:8089 http://127.0.0.1:8000/testfile > socks4
   - curl --socks4a localhost:8089 http://127.0.0.1:8000/testfile > socks4a

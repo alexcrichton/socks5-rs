@@ -1,8 +1,6 @@
 language: rust
 install:
-  - curl -O http://static.rust-lang.org/dist/rust-nightly-x86_64-unknown-linux-gnu.tar.gz
-  - tar xfz rust-nightly-x86_64-unknown-linux-gnu.tar.gz
-  - (cd rust-nightly-x86_64-unknown-linux-gnu/ && sudo ./install.sh)
+  - curl http://www.rust-lang.org/rustup.sh | sudo sh -
 script:
   - rustc main.rs
   - ./main &
@@ -15,4 +13,5 @@ script:
   - diff testfile socks5
   - diff testfile socks4
   - diff testfile socks4a
-
+env:
+  - LD_LIBRARY_PATH=/usr/local/lib

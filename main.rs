@@ -150,7 +150,7 @@ pub mod v5 {
     ///
     /// If successful, returns the remote connection that was established.
     pub fn connect(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<TcpStream> {
-        let mut remote = TcpStream::connect(addr.ip.to_str().as_slice(),
+        let mut remote = TcpStream::connect(addr.ip.to_string().as_slice(),
                                             addr.port);
 
         // Send the response of the result of the connection
@@ -253,7 +253,7 @@ pub mod v4 {
     /// If successful, returns the remote connection that was established.
     pub fn connect(s: &mut TcpStream,
                    addr: SocketAddr) -> io::IoResult<TcpStream> {
-        let remote = TcpStream::connect(addr.ip.to_str().as_slice(),
+        let remote = TcpStream::connect(addr.ip.to_string().as_slice(),
                                         addr.port);
 
         // Send the response of the result of the connection

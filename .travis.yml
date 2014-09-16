@@ -1,6 +1,4 @@
 language: rust
-install:
-  - curl http://www.rust-lang.org/rustup.sh | sudo sh -
 script:
   - rustc main.rs
   - ./main &
@@ -13,5 +11,3 @@ script:
   - diff testfile socks5
   - diff testfile socks4
   - diff testfile socks4a
-env:
-  - LD_LIBRARY_PATH=/usr/local/lib

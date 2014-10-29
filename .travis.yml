@@ -11,3 +11,6 @@ script:
   - diff testfile socks5
   - diff testfile socks4
   - diff testfile socks4a
+notifications:
+  email:
+    on_success: never

@@ -262,7 +262,7 @@ pub mod v4 {
         try!(s.write_be_u16(addr.port));
         match addr.ip {
             Ipv4Addr(a, b, c, d) => try!(s.write([a, b, c, d])),
-            Ipv6Addr(..) => fail!("no ipv6 in socks4"),
+            Ipv6Addr(..) => panic!("no ipv6 in socks4"),
         }
         remote
     }

@@ -196,7 +196,7 @@ pub mod v4 {
     use std::io::net::addrinfo::get_host_addresses;
     use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
     use std::io::net::tcp::TcpStream;
-    use std::io;
+    use std::io::{mod, AsRefReader};
     use std::str;
 
     pub const VERSION: u8 = 4;

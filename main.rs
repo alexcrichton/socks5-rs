@@ -11,7 +11,7 @@ use std::io;
 
 fn main() {
     println!("listening on 0.0.0.0:8089");
-    for l in TcpListener::bind("0.0.0.0", 8089).listen().incoming() {
+    for l in TcpListener::bind(("0.0.0.0", 8089)).listen().incoming() {
         let l = l.unwrap();
         spawn(proc() {
             let mut l = l;
@@ -150,8 +150,7 @@ pub mod v5 {
     ///
     /// If successful, returns the remote connection that was established.
     pub fn connect(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<TcpStream> {
-        let mut remote = TcpStream::connect(addr.ip.to_string().as_slice(),
-                                            addr.port);
+        let mut remote = TcpStream::connect(addr);
 
         // Send the response of the result of the connection
         let code = match remote {
@@ -253,8 +252,7 @@ pub mod v4 {
     /// If successful, returns the remote connection that was established.
     pub fn connect(s: &mut TcpStream,
                    addr: SocketAddr) -> io::IoResult<TcpStream> {
-        let remote = TcpStream::connect(addr.ip.to_string().as_slice(),
-                                        addr.port);
+        let remote = TcpStream::connect(addr);
 
         // Send the response of the result of the connection
         let code = if remote.is_ok() {0x5a} else {0x5b};

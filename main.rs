@@ -24,14 +24,14 @@ fn main() {
 fn handle(mut s: TcpStream) -> IoResult<()> {
     match try!(s.read_byte()) {
         v5::VERSION => match try!(v5::request(&mut s)) {
-            v5::Connect(addr) => {
+            v5::Request::Connect(addr) => {
                 let remote = try!(v5::connect(&mut s, addr));
                 proxy(s, remote)
             }
         },
 
         v4::VERSION => match try!(v4::request(&mut s)) {
-            v4::Connect(addr, _) => {
+            v4::Request::Connect(addr, _) => {
                 let remote = try!(v4::connect(&mut s, addr));
                 proxy(s, remote)
             }
@@ -140,7 +140,7 @@ pub mod v5 {
         let port = try!(s.read_be_u16());
 
         match cmd {
-            CMD_CONNECT => Ok(Connect(SocketAddr { ip: ip, port: port })),
+            CMD_CONNECT => Ok(Request::Connect(SocketAddr { ip: ip, port: port })),
             // Only the connect command is supported for now
             _ => Err(::other_err("unsupported command"))
         }
@@ -195,7 +195,7 @@ pub mod v4 {
     use std::io::net::addrinfo::get_host_addresses;
     use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
     use std::io::net::tcp::TcpStream;
-    use std::io::{mod, AsRefReader};
+    use std::io::{mod, ByRefReader};
     use std::str;
 
     pub const VERSION: u8 = 4;
@@ -241,7 +241,7 @@ pub mod v4 {
         };
 
         match cmd {
-            CMD_CONNECT => Ok(Connect(SocketAddr { ip: ip, port: port }, id)),
+            CMD_CONNECT => Ok(Request::Connect(SocketAddr { ip: ip, port: port }, id)),
             // Only the connect command is supported for now
             _ => Err(::other_err("unsupported command"))
         }

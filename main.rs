@@ -98,9 +98,9 @@ pub mod v5 {
 
         // Only support requests with no authentication for now
         if methods.contains(&METH_NO_AUTH) {
-            try!(s.write([VERSION, METH_NO_AUTH]));
+            try!(s.write(&[VERSION, METH_NO_AUTH]));
         } else {
-            try!(s.write([VERSION, 0xff]));
+            try!(s.write(&[VERSION, 0xff]));
             return Err(::other_err("no supported method given"))
         }
 
@@ -159,15 +159,15 @@ pub mod v5 {
             Err(ref e) if e.kind == io::ConnectionFailed => 4,
             Err(..) => 1,
         };
-        try!(s.write([5, code, 0]));
+        try!(s.write(&[5, code, 0]));
 
         fn write_addr(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<()> {
             match addr.ip {
                 Ipv4Addr(a, b, c, d) => {
-                    try!(s.write([1, a, b, c, d]));
+                    try!(s.write(&[1, a, b, c, d]));
                 }
                 Ipv6Addr(a, b, c, d, e, f, g, h) => {
-                    try!(s.write([4]));
+                    try!(s.write(&[4]));
                     try!(s.write_be_u16(a));
                     try!(s.write_be_u16(b));
                     try!(s.write_be_u16(c));
@@ -256,10 +256,10 @@ pub mod v4 {
 
         // Send the response of the result of the connection
         let code = if remote.is_ok() {0x5a} else {0x5b};
-        try!(s.write([0, code]));
+        try!(s.write(&[0, code]));
         try!(s.write_be_u16(addr.port));
         match addr.ip {
-            Ipv4Addr(a, b, c, d) => try!(s.write([a, b, c, d])),
+            Ipv4Addr(a, b, c, d) => try!(s.write(&[a, b, c, d])),
             Ipv6Addr(..) => panic!("no ipv6 in socks4"),
         }
         remote

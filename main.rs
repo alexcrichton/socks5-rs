@@ -13,7 +13,7 @@ fn main() {
     println!("listening on 0.0.0.0:8089");
     for l in TcpListener::bind(("0.0.0.0", 8089)).listen().incoming() {
         let l = l.unwrap();
-        spawn(proc() {
+        spawn(move|| {
             let mut l = l;
             let name = l.peer_name();
             println!("client: {} -- {}", name, handle(l));
@@ -54,7 +54,7 @@ fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
     }
 
     let (tx, rx) = channel();
-    spawn(proc() { tx.send(cp(client2, remote2)); });
+    spawn(move|| { tx.send(cp(client2, remote2)); });
     cp(remote, client).and(rx.recv())
 }
 

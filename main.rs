@@ -8,16 +8,17 @@
 use std::io::net::tcp::{TcpListener, TcpStream};
 use std::io::{Listener, Acceptor, IoResult};
 use std::io;
+use std::thread::Thread;
 
 fn main() {
     println!("listening on 0.0.0.0:8089");
     for l in TcpListener::bind(("0.0.0.0", 8089)).listen().incoming() {
         let l = l.unwrap();
-        spawn(move|| {
+        Thread::spawn(move|| {
             let mut l = l;
             let name = l.peer_name();
             println!("client: {} -- {}", name, handle(l));
-        });
+        }).detach();
     }
 }
 
@@ -54,7 +55,7 @@ fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
     }
 
     let (tx, rx) = channel();
-    spawn(move|| { tx.send(cp(client2, remote2)); });
+    Thread::spawn(move|| { tx.send(cp(client2, remote2)); }).detach();
     cp(remote, client).and(rx.recv())
 }
 
@@ -126,7 +127,7 @@ pub mod v5 {
             0x03 => {
                 let nbytes = try!(s.read_byte());
                 let name = try!(s.read_exact(nbytes as uint));
-                let name = match str::from_utf8(name.as_slice()) {
+                let name = match str::from_utf8(name.as_slice()).ok() {
                     Some(n) => n,
                     None => return Err(::other_err("invalid hostname provided"))
                 };
@@ -228,7 +229,7 @@ pub mod v4 {
             Ipv4Addr(0, 0, 0, n) if n != 0 => {
                 let mut name = try!(b.read_until(0));
                 name.pop();
-                let name = match str::from_utf8(name.as_slice()) {
+                let name = match str::from_utf8(name.as_slice()).ok() {
                     Some(s) => s,
                     None => return Err(::other_err("invalid domain name")),
                 };

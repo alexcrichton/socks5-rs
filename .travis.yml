@@ -1,4 +1,5 @@
 language: rust
+sudo: false
 script:
   - rustc main.rs
   - ./main &

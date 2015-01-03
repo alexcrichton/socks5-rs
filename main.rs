@@ -8,6 +8,7 @@
 use std::io::net::tcp::{TcpListener, TcpStream};
 use std::io::{Listener, Acceptor, IoResult};
 use std::io;
+use std::sync::mpsc::channel;
 use std::thread::Thread;
 
 fn main() {
@@ -55,8 +56,8 @@ fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
     }
 
     let (tx, rx) = channel();
-    Thread::spawn(move|| { tx.send(cp(client2, remote2)); }).detach();
-    cp(remote, client).and(rx.recv())
+    Thread::spawn(move|| { tx.send(cp(client2, remote2)).unwrap(); }).detach();
+    cp(remote, client).and(rx.recv().unwrap())
 }
 
 fn other_err(s: &'static str) -> io::IoError {
@@ -84,6 +85,7 @@ pub mod v5 {
     pub const ATYP_IPV6: u8 = 4;
     pub const ATYP_DOMAIN: u8 = 3;
 
+    #[derive(Copy)]
     pub enum Request {
         Connect(SocketAddr)
     }
@@ -131,7 +133,7 @@ pub mod v5 {
                     Some(n) => n,
                     None => return Err(::other_err("invalid hostname provided"))
                 };
-                match try!(get_host_addresses(name)).as_slice().head() {
+                match try!(get_host_addresses(name)).as_slice().first() {
                     Some(&addr) => addr,
                     None => return Err(::other_err("no valid ips for hostname"))
                 }
@@ -196,7 +198,7 @@ pub mod v4 {
     use std::io::net::addrinfo::get_host_addresses;
     use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
     use std::io::net::tcp::TcpStream;
-    use std::io::{mod, ByRefReader};
+    use std::io::{self, ByRefReader};
     use std::str;
 
     pub const VERSION: u8 = 4;

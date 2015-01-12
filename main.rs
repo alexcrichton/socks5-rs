@@ -18,8 +18,8 @@ fn main() {
         Thread::spawn(move|| {
             let mut l = l;
             let name = l.peer_name();
-            println!("client: {} -- {}", name, handle(l));
-        }).detach();
+            println!("client: {:?} -- {:?}", name, handle(l));
+        });
     }
 }
 
@@ -56,7 +56,7 @@ fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
     }
 
     let (tx, rx) = channel();
-    Thread::spawn(move|| { tx.send(cp(client2, remote2)).unwrap(); }).detach();
+    Thread::spawn(move|| { tx.send(cp(client2, remote2)).unwrap(); });
     cp(remote, client).and(rx.recv().unwrap())
 }
 
@@ -128,7 +128,7 @@ pub mod v5 {
                              try!(s.read_be_u16())),
             0x03 => {
                 let nbytes = try!(s.read_byte());
-                let name = try!(s.read_exact(nbytes as uint));
+                let name = try!(s.read_exact(nbytes as usize));
                 let name = match str::from_utf8(name.as_slice()).ok() {
                     Some(n) => n,
                     None => return Err(::other_err("invalid hostname provided"))

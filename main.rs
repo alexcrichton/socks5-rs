@@ -1,3 +1,4 @@
+#![feature(io, core, std_misc)]
 #![allow(dead_code)]
 
 //! Implementation of a socks5 proxy
@@ -5,9 +6,9 @@
 //! http://www.ietf.org/rfc/rfc1928.txt
 //! http://en.wikipedia.org/wiki/SOCKS
 
-use std::io::net::tcp::{TcpListener, TcpStream};
-use std::io::{Listener, Acceptor, IoResult};
-use std::io;
+use std::old_io::net::tcp::{TcpListener, TcpStream};
+use std::old_io::{Listener, Acceptor, IoResult};
+use std::old_io;
 use std::sync::mpsc::channel;
 use std::thread::Thread;
 
@@ -48,7 +49,7 @@ fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
     let remote2 = remote.clone();
 
     fn cp(mut reader: TcpStream, mut writer: TcpStream) -> IoResult<()> {
-        let err = io::util::copy(&mut reader, &mut writer);
+        let err = old_io::util::copy(&mut reader, &mut writer);
         // close other halves
         let _ = reader.close_write();
         let _ = writer.close_read();
@@ -60,15 +61,15 @@ fn proxy(client: TcpStream, remote: TcpStream) -> IoResult<()> {
     cp(remote, client).and(rx.recv().unwrap())
 }
 
-fn other_err(s: &'static str) -> io::IoError {
-    io::IoError { kind: io::OtherIoError, desc: s, detail: None }
+fn other_err(s: &'static str) -> old_io::IoError {
+    old_io::IoError { kind: old_io::OtherIoError, desc: s, detail: None }
 }
 
 pub mod v5 {
-    use std::io::net::addrinfo::get_host_addresses;
-    use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
-    use std::io::net::tcp::TcpStream;
-    use std::io;
+    use std::old_io::net::addrinfo::get_host_addresses;
+    use std::old_io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
+    use std::old_io::net::tcp::TcpStream;
+    use std::old_io;
     use std::str;
 
     pub const VERSION: u8 = 5;
@@ -93,7 +94,7 @@ pub mod v5 {
     /// Process a request from the client provided.
     ///
     /// It is assumed that the version number has already been read.
-    pub fn request(s: &mut TcpStream) -> io::IoResult<Request> {
+    pub fn request(s: &mut TcpStream) -> old_io::IoResult<Request> {
         let mut methods = Vec::new();
         for _ in range(0, try!(s.read_byte())) {
             methods.push(try!(s.read_byte()));
@@ -101,9 +102,9 @@ pub mod v5 {
 
         // Only support requests with no authentication for now
         if methods.contains(&METH_NO_AUTH) {
-            try!(s.write(&[VERSION, METH_NO_AUTH]));
+            try!(s.write_all(&[VERSION, METH_NO_AUTH]));
         } else {
-            try!(s.write(&[VERSION, 0xff]));
+            try!(s.write_all(&[VERSION, 0xff]));
             return Err(::other_err("no supported method given"))
         }
 
@@ -152,25 +153,25 @@ pub mod v5 {
     /// Connect to the remote address for the client specified.
     ///
     /// If successful, returns the remote connection that was established.
-    pub fn connect(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<TcpStream> {
+    pub fn connect(s: &mut TcpStream, addr: SocketAddr) -> old_io::IoResult<TcpStream> {
         let mut remote = TcpStream::connect(addr);
 
         // Send the response of the result of the connection
         let code = match remote {
             Ok(..) => 0,
-            Err(ref e) if e.kind == io::ConnectionRefused => 5,
-            Err(ref e) if e.kind == io::ConnectionFailed => 4,
+            Err(ref e) if e.kind == old_io::ConnectionRefused => 5,
+            Err(ref e) if e.kind == old_io::ConnectionFailed => 4,
             Err(..) => 1,
         };
-        try!(s.write(&[5, code, 0]));
+        try!(s.write_all(&[5, code, 0]));
 
-        fn write_addr(s: &mut TcpStream, addr: SocketAddr) -> io::IoResult<()> {
+        fn write_addr(s: &mut TcpStream, addr: SocketAddr) -> old_io::IoResult<()> {
             match addr.ip {
                 Ipv4Addr(a, b, c, d) => {
-                    try!(s.write(&[1, a, b, c, d]));
+                    try!(s.write_all(&[1, a, b, c, d]));
                 }
                 Ipv6Addr(a, b, c, d, e, f, g, h) => {
-                    try!(s.write(&[4]));
+                    try!(s.write_all(&[4]));
                     try!(s.write_be_u16(a));
                     try!(s.write_be_u16(b));
                     try!(s.write_be_u16(c));
@@ -195,10 +196,10 @@ pub mod v5 {
 }
 
 pub mod v4 {
-    use std::io::net::addrinfo::get_host_addresses;
-    use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
-    use std::io::net::tcp::TcpStream;
-    use std::io::{self, ByRefReader};
+    use std::old_io::net::addrinfo::get_host_addresses;
+    use std::old_io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr};
+    use std::old_io::net::tcp::TcpStream;
+    use std::old_io::{self, ByRefReader};
     use std::str;
 
     pub const VERSION: u8 = 4;
@@ -210,13 +211,13 @@ pub mod v4 {
         Connect(SocketAddr, Vec<u8>)
     }
 
-    fn by_ref<'a, R: Reader>(r: &'a mut R) -> io::RefReader<'a, R> { r.by_ref() }
+    fn by_ref<'a, R: Reader>(r: &'a mut R) -> old_io::RefReader<'a, R> { r.by_ref() }
 
     /// Process a request from the client provided.
     ///
     /// It is assumed that the version number has already been read.
-    pub fn request(s: &mut TcpStream) -> io::IoResult<Request> {
-        let mut b = io::BufferedReader::new(by_ref(s));
+    pub fn request(s: &mut TcpStream) -> old_io::IoResult<Request> {
+        let mut b = old_io::BufferedReader::new(by_ref(s));
         // assert_eq!(try!(s.read_byte()), VERSION);
         let cmd = try!(b.read_byte());
         let port = try!(b.read_be_u16());
@@ -254,15 +255,15 @@ pub mod v4 {
     ///
     /// If successful, returns the remote connection that was established.
     pub fn connect(s: &mut TcpStream,
-                   addr: SocketAddr) -> io::IoResult<TcpStream> {
+                   addr: SocketAddr) -> old_io::IoResult<TcpStream> {
         let remote = TcpStream::connect(addr);
 
         // Send the response of the result of the connection
         let code = if remote.is_ok() {0x5a} else {0x5b};
-        try!(s.write(&[0, code]));
+        try!(s.write_all(&[0, code]));
         try!(s.write_be_u16(addr.port));
         match addr.ip {
-            Ipv4Addr(a, b, c, d) => try!(s.write(&[a, b, c, d])),
+            Ipv4Addr(a, b, c, d) => try!(s.write_all(&[a, b, c, d])),
             Ipv6Addr(..) => panic!("no ipv6 in socks4"),
         }
         remote

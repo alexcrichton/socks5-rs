@@ -33,7 +33,7 @@ fn main() {
 fn test(proxy: &str) {
     println!("testing {}", proxy);
     let mut handle = Handle::new().proxy(proxy);
-    let response = handle.get("http://localhost:8888/data").exec().unwrap();
+    let response = handle.get("http://127.0.0.1:8888/data").exec().unwrap();
     assert_eq!(response.get_code(), 200);
     assert_eq!(response.get_body(), b"test\n");
 }

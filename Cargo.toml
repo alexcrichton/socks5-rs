@@ -1,0 +1,25 @@
+[package]
+
+name = "socks5"
+version = "0.1.0"
+authors = ["Alex Crichton <alex@alexcrichton.com>"]
+license = "MIT"
+
+[dependencies]
+byteorder = "0.3"
+
+[dev-dependencies]
+conduit-static = "0.7"
+civet = "0.7"
+curl = "0.2"
+conduit = "0.7"
+
+[[bin]]
+name = "socks5"
+test = false
+doc = false
+bench = false
+
+[[test]]
+name = "smoke"
+harness = false

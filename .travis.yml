@@ -1,17 +1,8 @@
 language: rust
 sudo: false
 script:
-  - rustc main.rs
-  - ./main &
-  - echo test > testfile
-  - python -m SimpleHTTPServer &
-  - sleep 10
-  - curl --socks5 localhost:8089 http://127.0.0.1:8000/testfile > socks5
-  - curl --socks4 localhost:8089 http://127.0.0.1:8000/testfile > socks4
-  - curl --socks4a localhost:8089 http://127.0.0.1:8000/testfile > socks4a
-  - diff testfile socks5
-  - diff testfile socks4
-  - diff testfile socks4a
+  - cargo build --verbose
+  - cargo test --verbose
 notifications:
   email:
     on_success: never

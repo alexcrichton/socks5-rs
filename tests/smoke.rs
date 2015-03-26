@@ -1,4 +1,4 @@
-extern crate "conduit-static" as conduit_static;
+extern crate conduit_static;
 extern crate civet;
 extern crate conduit;
 extern crate curl;

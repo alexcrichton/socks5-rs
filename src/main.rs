@@ -1,4 +1,4 @@
-#![feature(io)]
+#![feature(io, lookup_host)]
 #![allow(dead_code)]
 
 //! Implementation of a socks5 proxy

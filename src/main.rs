@@ -236,29 +236,30 @@ pub mod v4 {
         try!(b.read_until(0, &mut id));
         id.pop();
 
-        let addr = match ip.octets() {
-            [0, 0, 0, n] if n != 0 => {
-                let mut name = Vec::new();
-                try!(b.read_until(0, &mut name));
-                name.pop();
-                let name = match str::from_utf8(&name).ok() {
-                    Some(s) => s,
-                    None => return Err(::other_err("invalid domain name")),
-                };
-                let addr = match try!(net::lookup_host(name)).next() {
-                    Some(addr) => try!(addr),
-                    None => return Err(::other_err("no ips for domain name")),
-                };
-                match addr {
-                    SocketAddr::V4(ref a) => {
-                        SocketAddr::V4(SocketAddrV4::new(*a.ip(), port))
-                    }
-                    SocketAddr::V6(ref a) => {
-                        SocketAddr::V6(SocketAddrV6::new(*a.ip(), port, 0, 0))
-                    }
+        let octets = ip.octets();
+        let addr = if octets[0] == 0 && octets[1] == 0 && octets[2] == 0 &&
+                      octets[3] != 0 {
+            let mut name = Vec::new();
+            try!(b.read_until(0, &mut name));
+            name.pop();
+            let name = match str::from_utf8(&name).ok() {
+                Some(s) => s,
+                None => return Err(::other_err("invalid domain name")),
+            };
+            let addr = match try!(net::lookup_host(name)).next() {
+                Some(addr) => try!(addr),
+                None => return Err(::other_err("no ips for domain name")),
+            };
+            match addr {
+                SocketAddr::V4(ref a) => {
+                    SocketAddr::V4(SocketAddrV4::new(*a.ip(), port))
+                }
+                SocketAddr::V6(ref a) => {
+                    SocketAddr::V6(SocketAddrV6::new(*a.ip(), port, 0, 0))
                 }
             }
-            _ => SocketAddr::V4(SocketAddrV4::new(ip, port)),
+        } else {
+            SocketAddr::V4(SocketAddrV4::new(ip, port))
         };
 
         match cmd {

@@ -1,4 +1,4 @@
-#![feature(io, lookup_host)]
+#![feature(lookup_host)]
 #![allow(dead_code)]
 
 //! Implementation of a socks5 proxy
@@ -66,7 +66,7 @@ fn proxy(client: TcpStream, remote: TcpStream) -> io::Result<()> {
 }
 
 fn other_err(s: &'static str) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, s, None)
+    io::Error::new(io::ErrorKind::Other, s)
 }
 
 pub mod v5 {

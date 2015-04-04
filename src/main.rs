@@ -91,7 +91,7 @@ pub mod v5 {
     pub const ATYP_IPV6: u8 = 4;
     pub const ATYP_DOMAIN: u8 = 3;
 
-    #[derive(Copy)]
+    #[derive(Copy, Clone)]
     pub enum Request {
         Connect(SocketAddr)
     }

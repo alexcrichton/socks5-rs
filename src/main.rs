@@ -11,6 +11,7 @@ extern crate byteorder;
 use std::io;
 use std::net::{TcpStream, TcpListener, Shutdown};
 use std::thread;
+use std::sync::Arc;
 
 use byteorder::ReadBytesExt;
 
@@ -61,8 +62,11 @@ fn proxy(client: TcpStream, remote: TcpStream) -> io::Result<()> {
         err.map(|_| ())
     }
 
-    let child = thread::scoped(|| cp(&client, &remote));
-    cp(&remote, &client).and(child.join())
+    let pair1 = Arc::new((client, remote));
+    let pair2 = pair1.clone();
+
+    let child = thread::spawn(move || cp(&pair2.1, &pair2.0));
+    cp(&pair1.0, &pair1.1).and(child.join().unwrap())
 }
 
 fn other_err(s: &'static str) -> io::Error {

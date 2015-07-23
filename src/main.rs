@@ -127,6 +127,9 @@ impl mio::Handler for Server {
         }
         let client = self.clients.remove(&token).unwrap();
         event_loop.deregister(&client.stream).unwrap();
+        if let State::Proxy(ref stream, _, _) = client.state {
+            event_loop.deregister(stream).unwrap();
+        }
     }
 }
 

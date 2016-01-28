@@ -2,9 +2,11 @@ extern crate conduit_static;
 extern crate civet;
 extern crate curl;
 
-use std::process::{Command, Child};
 use std::net::TcpStream;
+use std::process::{Command, Child};
 use std::thread;
+use std::time::Duration;
+
 use civet::{Config, Server};
 use curl::http::Handle;
 
@@ -16,13 +18,14 @@ macro_rules! t {
 }
 
 fn main() {
-    let _a = Server::start(Config { port: 8888, threads: 1 },
-                           conduit_static::Static::new("tests"));
+    let mut cfg = Config::new();
+    cfg.port(8888).threads(1);
+    let _a = Server::start(cfg, conduit_static::Static::new("tests"));
     let proxy = Command::new("target/debug/socks5").spawn().unwrap();
 
     // Wait for server to come online
     while TcpStream::connect("127.0.0.1:9093").is_err() {
-        thread::sleep_ms(50);
+        thread::sleep(Duration::from_millis(50));
     }
 
     struct Bomb { c: Child }

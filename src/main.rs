@@ -7,6 +7,7 @@
 //! http://en.wikipedia.org/wiki/SOCKS
 
 extern crate mio;
+extern crate bytes;
 
 use std::collections::HashMap;
 use std::io::prelude::*;
@@ -16,7 +17,7 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
 use std::net;
 use std::str;
 
-use mio::buf::{RingBuf, Buf, MutBuf};
+use bytes::{RingBuf, Buf, MutBuf};
 use mio::prelude::*;
 use mio::tcp::{TcpListener, TcpStream};
 use mio::{Token, EventSet, PollOpt};
@@ -87,7 +88,7 @@ fn main() {
     println!("listening on 0.0.0.0:9093");
     let server = TcpListener::bind(&"0.0.0.0:9093".parse().unwrap()).unwrap();
     let mut events = EventLoop::new().unwrap();
-    events.register(&server, SERVER).unwrap();
+    events.register(&server, SERVER, EventSet::all(), PollOpt::edge()).unwrap();
     events.run(&mut Server {
         server: server,
         next_token: 1,
@@ -136,13 +137,13 @@ impl mio::Handler for Server {
 impl Server {
     fn accept_client(&mut self, event_loop: &mut EventLoop<Server>)
                      -> io::Result<()> {
-        if let Some(conn) = try!(self.server.accept()) {
+        if let Some((conn, _)) = try!(self.server.accept()) {
             let new_token = Token(self.next_token);
             self.next_token += 1;
-            try!(event_loop.register_opt(&conn, new_token,
-                                         EventSet::readable() |
-                                            EventSet::writable(),
-                                         PollOpt::edge()));
+            try!(event_loop.register(&conn, new_token,
+                                     EventSet::readable() |
+                                        EventSet::writable(),
+                                     PollOpt::edge()));
             self.clients.insert(new_token, Client {
                 stream: conn,
                 state: State::UnknownVersion,
@@ -347,10 +348,10 @@ impl Client {
                 }
                 let err = io::Error::new(io::ErrorKind::Other, "");
                 let stream = try!(mem::replace(stream, Err(err)));
-                try!(event_loop.register_opt(&stream, self.token,
-                                             EventSet::readable() |
-                                                EventSet::writable(),
-                                             PollOpt::edge()));
+                try!(event_loop.register(&stream, self.token,
+                                         EventSet::readable() |
+                                            EventSet::writable(),
+                                         PollOpt::edge()));
                 let incoming = RingBuf::new(32 * 1024);
                 let outgoing = RingBuf::new(32 * 1024);
                 State::Proxy(stream, incoming, outgoing)
@@ -363,11 +364,13 @@ impl Client {
                         None => break,
                     }
                 }
-                while a.mut_bytes().len() > 0 {
-                    match try!(self.stream.try_read(a.mut_bytes())) {
-                        Some(0) => { eof += 1; break }
-                        Some(n) => MutBuf::advance(a, n),
-                        None => break,
+                unsafe {
+                    while a.mut_bytes().len() > 0 {
+                        match try!(self.stream.try_read(a.mut_bytes())) {
+                            Some(0) => { eof += 1; break }
+                            Some(n) => MutBuf::advance(a, n),
+                            None => break,
+                        }
                     }
                 }
                 while Buf::bytes(b).len() > 0 {
@@ -376,11 +379,13 @@ impl Client {
                         None => break,
                     }
                 }
-                while b.mut_bytes().len() > 0 {
-                    match try!(stream.try_read(b.mut_bytes())) {
-                        Some(0) => { eof += 1; break }
-                        Some(n) => MutBuf::advance(b, n),
-                        None => break,
+                unsafe {
+                    while b.mut_bytes().len() > 0 {
+                        match try!(stream.try_read(b.mut_bytes())) {
+                            Some(0) => { eof += 1; break }
+                            Some(n) => MutBuf::advance(b, n),
+                            None => break,
+                        }
                     }
                 }
                 return if eof == 2 {

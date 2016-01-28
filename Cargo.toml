@@ -6,11 +6,12 @@ authors = ["Alex Crichton <alex@alexcrichton.com>"]
 license = "MIT"
 
 [dependencies]
-mio = "0.4.0"
+mio = "0.5.0"
+bytes = "0.3"
 
 [dev-dependencies]
 conduit-static = "0.7"
-civet = "0.7"
+civet = "0.8"
 curl = "0.2"
 conduit = "0.7"
 

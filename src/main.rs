@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io;
 use std::mem;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr};
 use std::net;
 use std::str;
 

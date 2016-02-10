@@ -137,7 +137,7 @@ impl mio::Handler for Server {
 impl Server {
     fn accept_client(&mut self, event_loop: &mut EventLoop<Server>)
                      -> io::Result<()> {
-        if let Some((conn, _)) = try!(self.server.accept()) {
+        while let Some((conn, _)) = try!(self.server.accept()) {
             let new_token = Token(self.next_token);
             self.next_token += 1;
             try!(event_loop.register(&conn, new_token,

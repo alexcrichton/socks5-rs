@@ -7,7 +7,6 @@
 //! http://en.wikipedia.org/wiki/SOCKS
 
 extern crate mio;
-extern crate bytes;
 
 use std::collections::HashMap;
 use std::io::prelude::*;
@@ -17,7 +16,6 @@ use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr};
 use std::net;
 use std::str;
 
-use bytes::{RingBuf, Buf, MutBuf};
 use mio::prelude::*;
 use mio::tcp::{TcpListener, TcpStream};
 use mio::{Token, EventSet, PollOpt};
@@ -64,7 +62,7 @@ enum State {
     V4Connect(SocketAddrV4),
 
     WriteConnectHandshake(io::Result<TcpStream>, usize, Vec<u8>),
-    Proxy(TcpStream, RingBuf, RingBuf),
+    Proxy(TcpStream, usize, Vec<u8>, usize, Vec<u8>),
 }
 
 type MyResult<T> = Result<T, MyError>;
@@ -128,7 +126,7 @@ impl mio::Handler for Server {
         }
         let client = self.clients.remove(&token).unwrap();
         event_loop.deregister(&client.stream).unwrap();
-        if let State::Proxy(ref stream, _, _) = client.state {
+        if let State::Proxy(ref stream, _, _, _, _) = client.state {
             event_loop.deregister(stream).unwrap();
         }
     }
@@ -352,40 +350,48 @@ impl Client {
                                          EventSet::readable() |
                                             EventSet::writable(),
                                          PollOpt::edge()));
-                let incoming = RingBuf::new(32 * 1024);
-                let outgoing = RingBuf::new(32 * 1024);
-                State::Proxy(stream, incoming, outgoing)
+                let incoming = Vec::with_capacity(32 * 1024);
+                let outgoing = Vec::with_capacity(32 * 1024);
+                State::Proxy(stream, 0, incoming, 0, outgoing)
             }
-            State::Proxy(ref mut stream, ref mut a, ref mut b) => {
+            State::Proxy(ref mut stream,
+                         ref mut a_pos,
+                         ref mut a,
+                         ref mut b_pos,
+                         ref mut b) => {
                 let mut eof = 0;
-                while Buf::bytes(a).len() > 0 {
-                    match try!(stream.try_write(Buf::bytes(a))) {
-                        Some(n) => Buf::advance(a, n),
+                while *a_pos < a.len() {
+                    match try!(stream.try_write(&a[*a_pos..])) {
+                        Some(0) => break,
+                        Some(n) => *a_pos += n,
                         None => break,
                     }
                 }
-                unsafe {
-                    while a.mut_bytes().len() > 0 {
-                        match try!(self.stream.try_read(a.mut_bytes())) {
-                            Some(0) => { eof += 1; break }
-                            Some(n) => MutBuf::advance(a, n),
-                            None => break,
-                        }
+                if *a_pos == a.len() {
+                    *a_pos = 0;
+                    a.truncate(0);
+                    match self.stream.read_to_end(a) {
+                        Ok(0) => eof += 1,
+                        Ok(_) => {}
+                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                        Err(e) => return Err(From::from(e)),
                     }
                 }
-                while Buf::bytes(b).len() > 0 {
-                    match try!(self.stream.try_write(Buf::bytes(b))) {
-                        Some(n) => Buf::advance(b, n),
+                while *b_pos < b.len() {
+                    match try!(self.stream.try_write(&b[*b_pos..])) {
+                        Some(0) => break,
+                        Some(n) => *b_pos += n,
                         None => break,
                     }
                 }
-                unsafe {
-                    while b.mut_bytes().len() > 0 {
-                        match try!(stream.try_read(b.mut_bytes())) {
-                            Some(0) => { eof += 1; break }
-                            Some(n) => MutBuf::advance(b, n),
-                            None => break,
-                        }
+                if *b_pos == b.len() {
+                    *b_pos = 0;
+                    b.truncate(0);
+                    match stream.read_to_end(b) {
+                        Ok(0) => eof += 1,
+                        Ok(_) => {}
+                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                        Err(e) => return Err(From::from(e)),
                     }
                 }
                 return if eof == 2 {

@@ -314,11 +314,10 @@ impl Client {
                 let name = try!(str::from_utf8(bytes));
                 let addr = try!(net::lookup_host(name)).filter_map(|addr| {
                     match addr {
-                        Ok(SocketAddr::V4(ref a)) => {
+                        SocketAddr::V4(ref a) => {
                             Some(SocketAddrV4::new(*a.ip(), port))
                         }
-                        Ok(SocketAddr::V6(..)) |
-                        Err(..) => None
+                        SocketAddr::V6(..) => None,
                     }
                 }).next();
                 let addr = try!(addr.ok_or_else(|| {
